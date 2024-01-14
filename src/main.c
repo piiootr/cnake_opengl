@@ -3,9 +3,15 @@
 #include <GLFW/glfw3.h>
 
 
-#define MARGIN         15
-#define WINDOW_HEIGHT 600
-#define WINDOW_WIDHT  ((6 * WINDOW_HEIGHT - 3 * MARGIN) / 5)
+#define BOX_RADIUS        10.0f
+#define BOX_SHADOW_LENGTH 2.0f
+#define N_CELLS_X         15
+#define N_CELLS_Y         15
+#define CELL_PADDING      4
+#define MARGIN            15
+
+#define WINDOW_HEIGHT     600
+#define WINDOW_WIDHT      ((6 * WINDOW_HEIGHT - 3 * MARGIN) / 5)
 
 #define COLOR_BACKGROUND ((float[]) {0.4f, 0.4f, 1.0f})
 #define COLOR_FOOD       ((float[]) {1.0f, 0.4f, 0.4f})
@@ -51,7 +57,6 @@ const char *shaderf_src =
 struct rectangle {
     GLfloat pos_x, pos_y;
     GLfloat size_w, size_h;
-    GLfloat radius;
     GLfloat shadow_length;
 };
 struct field {
@@ -60,6 +65,11 @@ struct field {
     GLfloat margin;
 };
 
+struct snake {
+    int head;
+    int tail[N_CELLS_X * N_CELLS_Y - 1];
+    int tail_length;
+};
 
 int main(){
     GLint       index;
@@ -68,7 +78,6 @@ int main(){
     GLuint      VAO, VBO, EBO;
     GLint       w_sizew, w_sizeh;
     GLint       fb_sizew, fb_sizeh;
-    GLfloat     margin;
     GLuint      indices[] = {
         0, 1, 2,
         2, 3, 0
@@ -83,6 +92,10 @@ int main(){
     struct rectangle box_label[3];
     struct rectangle box_field;
     struct rectangle cell;
+    GLfloat          margin;
+    GLint            field[N_CELLS_X * N_CELLS_Y];
+    struct snake     snake;
+    GLint            food;
 
     if (!glfwInit()) return -1;
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
@@ -126,14 +139,12 @@ int main(){
     box_title.size_h = (GLfloat) (WINDOW_HEIGHT - 3.0f * margin) / 5.0f;
     box_title.pos_x  = margin;
     box_title.pos_y  = (GLfloat) WINDOW_HEIGHT - box_title.size_h - margin;
-    box_title.radius = 0.0f;
     box_title.shadow_length = 0.0f;
 
     box_field.size_w = ((GLfloat) (WINDOW_WIDHT - 3 * (GLint) margin)) * 2.0f / 3.0f;;
-    box_field.size_h = box_title.size_h * 4.0f;
+    box_field.size_h = (GLfloat) (WINDOW_HEIGHT - 3.0f * margin) * 4.0f / 5.0f;
     box_field.pos_x  = margin;
     box_field.pos_y  = margin;
-    box_field.radius = 0.0f;
     box_field.shadow_length = 0.0f;
 
     for (index = 0; index < 3; index++) {
@@ -141,8 +152,24 @@ int main(){
         box_label[index].size_h = (box_field.size_h - 2.0f * margin) / 3.0f;
         box_label[index].pos_x  = box_field.pos_x + box_field.size_w + margin;
         box_label[index].pos_y  = margin + index * (box_label[index].size_h + margin);
-        box_label[index].radius = 0.0f;
         box_label[index].shadow_length = 0.0f;
+    }
+
+    box_field.size_w = ((GLfloat) (WINDOW_WIDHT - 3 * (GLint) margin)) * 2.0f / 3.0f;
+    box_field.size_h = box_title.size_h * 4.0f;
+    box_field.pos_x  = margin;
+    box_field.pos_y  = margin;
+    box_field.shadow_length = 0.0f;
+
+    cell.size_w = (box_field.size_w - 2.0f * margin - (GLfloat)(N_CELLS_X - 1) * CELL_PADDING) / N_CELLS_X;
+    cell.size_h = (box_field.size_h - 2.0f * margin - (GLfloat)(N_CELLS_Y - 1) * CELL_PADDING) / N_CELLS_Y;
+    cell.pos_x  = box_field.pos_x + margin;
+    cell.pos_y  = box_field.pos_y + margin;
+    cell.shadow_length = 0.0f;
+
+
+    for (index = 0; index < N_CELLS_X * N_CELLS_Y; index++) {
+        field[index] = -1;
     }
 
     while (!glfwWindowShouldClose(window)) {
@@ -156,8 +183,8 @@ int main(){
         glUseProgram(shaderp);
         glUniform2f(glGetUniformLocation(shaderp, "window_size"), (GLfloat) WINDOW_WIDHT, (GLfloat) WINDOW_HEIGHT);
         glUniform2f(glGetUniformLocation(shaderp, "frambuffer_size"), (GLfloat) fb_sizew, (GLfloat) fb_sizeh);
-        glUniform1f(glGetUniformLocation(shaderp, "radius"), 0.0f); /* TODO: */
-        glUniform1f(glGetUniformLocation(shaderp, "shadow_length"), 0.0f); /* TODO: */
+        glUniform1f(glGetUniformLocation(shaderp, "radius"), BOX_RADIUS);
+        glUniform1f(glGetUniformLocation(shaderp, "shadow_length"), BOX_SHADOW_LENGTH);
         glUniform3f(glGetUniformLocation(shaderp, "obj_color"), (GLfloat) COLOR_BOX[0], (GLfloat) COLOR_BOX[1], (GLfloat) COLOR_BOX[2]);
 
         /* title box */
@@ -177,6 +204,14 @@ int main(){
             glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, (const void *) 0);
         }
         /* cells */
+        glUniform3f(glGetUniformLocation(shaderp, "obj_color"), (GLfloat) COLOR_FONT1[0], (GLfloat) COLOR_FONT1[1], (GLfloat) COLOR_FONT1[2]);
+        for (index = 0; index < N_CELLS_X * N_CELLS_Y; index++) {
+            glUniform2f(glGetUniformLocation(shaderp, "obj_pos"),
+                cell.pos_x + (GLfloat) (index % N_CELLS_X) * cell.size_w + (GLfloat) (index % N_CELLS_X) * (GLfloat) CELL_PADDING,
+                cell.pos_y + (GLfloat) (index / N_CELLS_X) * cell.size_h + (GLfloat) (index / N_CELLS_X) * (GLfloat) CELL_PADDING);
+            glUniform2f(glGetUniformLocation(shaderp, "obj_size"), cell.size_w, cell.size_h);
+            glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, (const void *) 0);
+        }
 
         /* font shader */
 
