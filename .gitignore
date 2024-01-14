@@ -3,6 +3,7 @@ compile_flags.txt
 *.icloud
 .DS_Store
 .vscode
+main.app
 
 # Prerequisites
 *.d

@@ -1,6 +1,7 @@
 CC		:= clang
 CFLAGS	:= -std=c99 -Os
-CFLAGS	+= -Wextra -Wall -Werror
+CFLAGS	+= -Wextra -Wall
+#CFLAGS	+= -Wextra -Wall -Werror
 CFLAGS	+= -Wfloat-equal -Winit-self
 CFLAGS	+= -Wundef -Wshadow -Wpointer-arith
 CFLAGS	+= -Wcast-align -Wstrict-prototypes
@@ -17,9 +18,9 @@ LDFLAGS	+= -framework OpengL -framework IOKit -framework CoreVideo -framework Co
 GLAD := lib/glad/src/glad.o
 GLFW := lib/glfw/src/libglfw3.a
 
-.PHONY: all main
+.PHONY: all main.app
 
-all: libs main
+all: libs main.app
 
 libs: $(GLAD) $(GLFW)
 
@@ -34,6 +35,6 @@ $(GLAD): lib/glad/src/gl.c
 	@cd lib/glad && \
 	$(CC) -o src/glad.o -Iinclude -c src/gl.c
 
-main: src/main.c
+main.app: src/main.c
 	@echo compiling main
-	@$(CC) -o main $(CFLAGS) $(LDFLAGS) src/main.c
+	@$(CC) -o main.app $(CFLAGS) $(LDFLAGS) src/main.c
