@@ -148,6 +148,7 @@ int main(){
     box_field.pos_y  = margin;
     box_field.shadow_length = 0.0f;
 
+    /* TODO: reduce to just one box and add offset in drawing call */
     for (index = 0; index < 3; index++) {
         box_label[index].size_w = box_field.size_h / 2.0f;
         box_label[index].size_h = (box_field.size_h - 2.0f * margin) / 3.0f;
@@ -175,6 +176,12 @@ int main(){
         /* TODO: calc circle field */
         /* CENTER: N_CELLS_X / 2, N_CELLS_Y / 2 * N_CELLS */
     }
+
+    /* TODO: add random function to get random position for snake and food */
+    snake.head = 0;
+    snake.tail_length = 0;
+
+    food = 0;
 
     while (!glfwWindowShouldClose(window)) {
         glClearColor(COLOR_BACKGROUND[0], COLOR_BACKGROUND[1], COLOR_BACKGROUND[2], 1.0);
