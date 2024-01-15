@@ -1,14 +1,15 @@
 #include <stdio.h>
+#include <math.h>
 #include <glad/gl.h>
 #include <GLFW/glfw3.h>
 
 
-#define BOX_RADIUS        10.0f
+#define BOX_RADIUS        20.0f
 #define BOX_SHADOW_LENGTH 2.0f
 #define N_CELLS_X         15
 #define N_CELLS_Y         15
 #define CELL_PADDING      4
-#define MARGIN            15
+#define MARGIN            30
 
 #define WINDOW_HEIGHT     600
 #define WINDOW_WIDHT      ((6 * WINDOW_HEIGHT - 3 * MARGIN) / 5)
@@ -161,15 +162,18 @@ int main(){
     box_field.pos_y  = margin;
     box_field.shadow_length = 0.0f;
 
-    cell.size_w = (box_field.size_w - 2.0f * margin - (GLfloat)(N_CELLS_X - 1) * CELL_PADDING) / N_CELLS_X;
-    cell.size_h = (box_field.size_h - 2.0f * margin - (GLfloat)(N_CELLS_Y - 1) * CELL_PADDING) / N_CELLS_Y;
-    cell.pos_x  = box_field.pos_x + margin;
-    cell.pos_y  = box_field.pos_y + margin;
+    cell.size_w = (box_field.size_w - 2.0f * (margin + (GLfloat) BOX_RADIUS) - (GLfloat)(N_CELLS_X - 1) * CELL_PADDING) / N_CELLS_X;
+    cell.size_h = (box_field.size_h - 2.0f * (margin + (GLfloat) BOX_RADIUS) - (GLfloat)(N_CELLS_Y - 1) * CELL_PADDING) / N_CELLS_Y;
+    cell.pos_x  = box_field.pos_x + margin + (GLfloat) BOX_RADIUS;
+    cell.pos_y  = box_field.pos_y + margin + (GLfloat) BOX_RADIUS;
     cell.shadow_length = 0.0f;
 
 
     for (index = 0; index < N_CELLS_X * N_CELLS_Y; index++) {
         field[index] = -1;
+
+        /* TODO: calc circle field */
+        /* CENTER: N_CELLS_X / 2, N_CELLS_Y / 2 * N_CELLS */
     }
 
     while (!glfwWindowShouldClose(window)) {
