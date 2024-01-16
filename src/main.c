@@ -4,10 +4,11 @@
 #include <GLFW/glfw3.h>
 
 
-#define BOX_RADIUS        20.0f
-#define BOX_SHADOW_LENGTH 2.0f
-#define N_CELLS_X         15
-#define N_CELLS_Y         15
+#define BOX_RADIUS        16.0f
+#define CELL_RADIUS       2.0f
+#define BOX_SHADOW_LENGTH 32.0f
+#define N_CELLS_X         16
+#define N_CELLS_Y         16
 #define CELL_PADDING      4
 #define MARGIN            30
 
@@ -21,6 +22,7 @@
 #define COLOR_FONT1      ((float[]) {0.9451f, 0.9451f, 0.9451f})
 #define COLOR_FONT2      ((float[]) {0.5922f, 0.5922f, 0.5922f})
 #define COLOR_BOX        ((float[]) {0.1412f, 0.1608f, 0.1843f})
+#define COLOR_SHADOW     ((float[]) {0.1412f, 0.1608f, 0.1843f})
 
 const char *shaderv_src =
     "#version 330 core\n"
@@ -34,7 +36,7 @@ const char *shaderv_src =
     "uniform float shadow_length;"
     "void main() {"
     "   vec2 nvert_pos = vert_pos;"
-    "   nvert_pos *= obj_size / window_size;"
+    "   nvert_pos *= (obj_size + vec2(shadow_length)) / window_size;"
     "   nvert_pos += obj_pos / window_size;"
     "   nvert_pos *= 2.0;"
     "   nvert_pos -= vec2(1.0, 1.0);"
@@ -47,11 +49,31 @@ const char *shaderf_src =
     "uniform vec2 obj_pos;"
     "uniform vec2 obj_size;"
     "uniform vec3 obj_color;"
+    "uniform vec3 shadow_color;"
     "uniform float radius;"
     "uniform float shadow_length;"
     "out vec4 frag_col;"
+
+    "float sdRoundRect(in vec2 p, in vec2 b, in float r) {"
+    "   vec2   q  = abs(p) - (b / 2.0f) + r;"
+    "          q += r;"
+    "   float re  = 0.0f;"
+    "   re += max(q.x, q.y);"
+    "   re  = min(re, 0.0f);"
+    "   re += length(max(q, 0.0f));"
+    "   re -= r;"
+    "   return -(clamp(re, 0.0f, 1.0f) - 1.0f);" /* TODO: why flipped sign? */
+    "}"
+
+    "float sigmoid(float x) {"
+    "   return 1.0f / (1.0f + exp(-x));"
+    "}"
+
     "void main() {"
-    "   frag_col = vec4(obj_color, 1.0);"
+    "   vec2 uv = window_size * gl_FragCoord.xy / frambuffer_size;"
+    "   vec2 obj_center   = obj_pos + (obj_size / 2.0);"
+    "   float alp_obj     = sdRoundRect(uv - obj_center, obj_size, radius);"
+    "   frag_col = vec4(obj_color, alp_obj);"
     "}\0";
 
 
@@ -109,6 +131,9 @@ int main(){
     glfwMakeContextCurrent(window);
     if (!gladLoadGL(glfwGetProcAddress)) return -1;
 
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glEnable(GL_BLEND);
+
     shaderv = glCreateShader(GL_VERTEX_SHADER);
     shaderf = glCreateShader(GL_FRAGMENT_SHADER);
     glShaderSource(shaderv, 1, &shaderv_src, NULL);
@@ -151,6 +176,7 @@ int main(){
     /* TODO: reduce to just one box and add offset in drawing call */
     for (index = 0; index < 3; index++) {
         box_label[index].size_w = box_field.size_h / 2.0f;
+        //box_label[index].size_h = (box_field.size_h - 2.0f * margin) / 3.0f;
         box_label[index].size_h = (box_field.size_h - 2.0f * margin) / 3.0f;
         box_label[index].pos_x  = box_field.pos_x + box_field.size_w + margin;
         box_label[index].pos_y  = margin + index * (box_label[index].size_h + margin);
@@ -197,6 +223,7 @@ int main(){
         glUniform1f(glGetUniformLocation(shaderp, "radius"), BOX_RADIUS);
         glUniform1f(glGetUniformLocation(shaderp, "shadow_length"), BOX_SHADOW_LENGTH);
         glUniform3f(glGetUniformLocation(shaderp, "obj_color"), (GLfloat) COLOR_BOX[0], (GLfloat) COLOR_BOX[1], (GLfloat) COLOR_BOX[2]);
+        //glUniform3f(glGetUniformLocation(shaderp, "shadow_color"), (GLfloat) COLOR_SHADOW[0], (GLfloat) COLOR_SHADOW[1], (GLfloat) COLOR_SHADOW[2]);
 
         /* title box */
         glUniform2f(glGetUniformLocation(shaderp, "obj_pos"), box_title.pos_x, box_title.pos_y);
@@ -216,6 +243,7 @@ int main(){
         }
         /* cells */
         glUniform3f(glGetUniformLocation(shaderp, "obj_color"), (GLfloat) COLOR_FONT1[0], (GLfloat) COLOR_FONT1[1], (GLfloat) COLOR_FONT1[2]);
+        glUniform1f(glGetUniformLocation(shaderp, "radius"), CELL_RADIUS);
         for (index = 0; index < N_CELLS_X * N_CELLS_Y; index++) {
             glUniform2f(glGetUniformLocation(shaderp, "obj_pos"),
                 cell.pos_x + (GLfloat) (index % N_CELLS_X) * cell.size_w + (GLfloat) (index % N_CELLS_X) * (GLfloat) CELL_PADDING,
