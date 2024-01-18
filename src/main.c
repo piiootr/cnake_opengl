@@ -5,12 +5,12 @@
 
 
 #define BOX_RADIUS        16.0f
-#define CELL_RADIUS       2.0f
-#define BOX_SHADOW_LENGTH 32.0f
+#define CELL_RADIUS       4.0f
+#define BOX_SHADOW_LENGTH 8.0f
 #define N_CELLS_X         16
 #define N_CELLS_Y         16
 #define CELL_PADDING      4
-#define MARGIN            30
+#define MARGIN            32
 
 #define WINDOW_HEIGHT     600
 #define WINDOW_WIDHT      ((6 * WINDOW_HEIGHT - 3 * MARGIN) / 5)
@@ -22,7 +22,8 @@
 #define COLOR_FONT1      ((float[]) {0.9451f, 0.9451f, 0.9451f})
 #define COLOR_FONT2      ((float[]) {0.5922f, 0.5922f, 0.5922f})
 #define COLOR_BOX        ((float[]) {0.1412f, 0.1608f, 0.1843f})
-#define COLOR_SHADOW     ((float[]) {0.1412f, 0.1608f, 0.1843f})
+//#define COLOR_SHADOW     ((float[]) {0.1412f, 0.1608f, 0.1843f})
+#define COLOR_SHADOW     COLOR_FOOD
 
 const char *shaderv_src =
     "#version 330 core\n"
@@ -73,7 +74,13 @@ const char *shaderf_src =
     "   vec2 uv = window_size * gl_FragCoord.xy / frambuffer_size;"
     "   vec2 obj_center   = obj_pos + (obj_size / 2.0);"
     "   float alp_obj     = sdRoundRect(uv - obj_center, obj_size, radius);"
-    "   frag_col = vec4(obj_color, alp_obj);"
+    "   float alp_shadow  = sdRoundRect(uv -  obj_center, obj_size + 2.0 * vec2(shadow_length), radius + shadow_length);"
+    "   vec4 shsh = vec4(shadow_color, alp_shadow);"
+    "   vec4 obob = vec4(obj_color, alp_obj);"
+    "   vec4 finco = mix(shsh, obob, alp_obj);"
+    //"   frag_col = vec4(obj_color, alp_obj);"
+    "   frag_col = vec4(obj_color, alp_shadow);"
+    //"   frag_col = finco;"
     "}\0";
 
 
