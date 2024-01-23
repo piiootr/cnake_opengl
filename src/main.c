@@ -1,113 +1,77 @@
 #include <stdio.h>
-#include <math.h>
+#include <stdlib.h>
+#include <time.h>
+
 #include <glad/gl.h>
 #include <GLFW/glfw3.h>
 
-
-#define BOX_RADIUS        16.0f
-#define CELL_RADIUS       4.0f
-#define BOX_SHADOW_LENGTH 8.0f
 #define N_CELLS_X         16
 #define N_CELLS_Y         16
-#define CELL_PADDING      4
-#define MARGIN            32
 
-#define WINDOW_HEIGHT     600
-#define WINDOW_WIDHT      ((6 * WINDOW_HEIGHT - 3 * MARGIN) / 5)
+#define WINDOW_HEIGHT     512
+#define WINDOW_WIDHT      512
 
 #define COLOR_BACKGROUND ((float[]) {0.4f, 0.4f, 1.0f})
 #define COLOR_FOOD       ((float[]) {1.0f, 0.4f, 0.4f})
-#define COLOR_HEAD       ((float[]) {0.2f, 0.2f, 0.5f})
+#define COLOR_HEAD       ((float[]) {0.3f, 0.75f, 0.3f})
 #define COLOR_TAIL       ((float[]) {0.4f, 1.0f, 0.4f})
 #define COLOR_FONT1      ((float[]) {0.9451f, 0.9451f, 0.9451f})
 #define COLOR_FONT2      ((float[]) {0.5922f, 0.5922f, 0.5922f})
 #define COLOR_BOX        ((float[]) {0.1412f, 0.1608f, 0.1843f})
-//#define COLOR_SHADOW     ((float[]) {0.1412f, 0.1608f, 0.1843f})
-#define COLOR_SHADOW     COLOR_FOOD
+#define COLOR_SHADOW     ((float[]) {0.1412f, 0.1608f, 0.1843f})
 
 const char *shaderv_src =
     "#version 330 core\n"
     "layout (location = 0) in vec2 vert_pos;"
-    "uniform vec2 window_size;"
-    "uniform vec2 frambuffer_size;"
-    "uniform vec2 obj_pos;"
-    "uniform vec2 obj_size;"
-    "uniform vec3 obj_color;"
-    "uniform float radius;"
-    "uniform float shadow_length;"
+    "uniform vec2 grid_size;"
+    "uniform float cell_id;"
     "void main() {"
-    "   vec2 nvert_pos = vert_pos;"
-    "   nvert_pos *= (obj_size + vec2(shadow_length)) / window_size;"
-    "   nvert_pos += obj_pos / window_size;"
-    "   nvert_pos *= 2.0;"
-    "   nvert_pos -= vec2(1.0, 1.0);"
-    "   gl_Position = vec4(nvert_pos, 0.0, 1.0);"
+    "   vec2 cell_size = vec2(1.0, 1.0) / grid_size;"
+
+    "   float posx, posy;"
+    "   posx = mod(cell_id, grid_size.x);"
+    "   posy = floor(cell_id / grid_size.x);"
+
+    "   vec2 new_vert = vert_pos;"
+    "   new_vert = new_vert * cell_size;"
+    "   new_vert = new_vert + vec2(posx, posy) * cell_size;"
+    "   new_vert = new_vert * 2 - 1.0;"
+    //"   new_vert = new_vert + (new_vert * vec2(posx, posy));"
+    //"   new_vert = new_vert + new_vert * vec2(posx, posy);"
+
+    "   gl_Position = vec4(new_vert, 0.0, 1.0);"
+    "   "
     "}\0";
 const char *shaderf_src =
     "#version 330 core\n"
-    "uniform vec2 window_size;"
-    "uniform vec2 frambuffer_size;"
-    "uniform vec2 obj_pos;"
-    "uniform vec2 obj_size;"
-    "uniform vec3 obj_color;"
-    "uniform vec3 shadow_color;"
-    "uniform float radius;"
-    "uniform float shadow_length;"
     "out vec4 frag_col;"
-
-    "float sdRoundRect(in vec2 p, in vec2 b, in float r) {"
-    "   vec2   q  = abs(p) - (b / 2.0f) + r;"
-    "          q += r;"
-    "   float re  = 0.0f;"
-    "   re += max(q.x, q.y);"
-    "   re  = min(re, 0.0f);"
-    "   re += length(max(q, 0.0f));"
-    "   re -= r;"
-    "   return -(clamp(re, 0.0f, 1.0f) - 1.0f);" /* TODO: why flipped sign? */
-    "}"
-
-    "float sigmoid(float x) {"
-    "   return 1.0f / (1.0f + exp(-x));"
-    "}"
-
+    "uniform int color_value;"
+    "uniform vec3 color_food;"
+    "uniform vec3 color_head;"
+    "uniform vec3 color_tail;"
+    "uniform vec3 color_empty;"
     "void main() {"
-    "   vec2 uv = window_size * gl_FragCoord.xy / frambuffer_size;"
-    "   vec2 obj_center   = obj_pos + (obj_size / 2.0);"
-    "   float alp_obj     = sdRoundRect(uv - obj_center, obj_size, radius);"
-    "   float alp_shadow  = sdRoundRect(uv -  obj_center, obj_size + 2.0 * vec2(shadow_length), radius + shadow_length);"
-    "   vec4 shsh = vec4(shadow_color, alp_shadow);"
-    "   vec4 obob = vec4(obj_color, alp_obj);"
-    "   vec4 finco = mix(shsh, obob, alp_obj);"
-    //"   frag_col = vec4(obj_color, alp_obj);"
-    "   frag_col = vec4(obj_color, alp_shadow);"
-    //"   frag_col = finco;"
+    "   vec3 colors[4];"
+    "   colors[0] = color_empty;"
+    "   colors[1] = color_head;"
+    "   colors[2] = color_tail;"
+    "   colors[3] = color_food;"
+    "   frag_col = vec4(colors[color_value], 1.0);"
+    //"   frag_col = vec4(1.0, 0.4, 0.4, 1.0);"
     "}\0";
 
-
-struct rectangle {
-    GLfloat pos_x, pos_y;
-    GLfloat size_w, size_h;
-    GLfloat shadow_length;
-};
-struct field {
-    GLint   nx, ny;
-    GLfloat padding;
-    GLfloat margin;
-};
-
 struct snake {
-    int head;
-    int tail[N_CELLS_X * N_CELLS_Y - 1];
-    int tail_length;
+    size_t head_posx, head_posy;
+    size_t length;
+    size_t tail_posx;
+    size_t tail_posy;
 };
 
 int main(){
-    GLint       index;
+    size_t      index;
     GLFWwindow *window;
     GLuint      shaderv, shaderf, shaderp;
     GLuint      VAO, VBO, EBO;
-    GLint       w_sizew, w_sizeh;
-    GLint       fb_sizew, fb_sizeh;
     GLuint      indices[] = {
         0, 1, 2,
         2, 3, 0
@@ -118,14 +82,11 @@ int main(){
         1.0, 1.0,
         0.0, 1.0
     };
-    struct rectangle box_title;
-    struct rectangle box_label[3];
-    struct rectangle box_field;
-    struct rectangle cell;
-    GLfloat          margin;
-    GLint            field[N_CELLS_X * N_CELLS_Y];
-    struct snake     snake;
-    GLint            food;
+    GLint field[N_CELLS_X * N_CELLS_Y] = {0};
+    struct snake snake = {0};
+
+    /* set random generator seed */
+    srand((unsigned int) time(NULL));
 
     if (!glfwInit()) return -1;
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
@@ -167,99 +128,50 @@ int main(){
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(GLfloat), (void *) 0);
     glEnableVertexAttribArray(0);
 
-    margin = (GLfloat) MARGIN;
-    box_title.size_w = (GLfloat) (WINDOW_WIDHT - 2 * (GLint) margin);
-    box_title.size_h = (GLfloat) (WINDOW_HEIGHT - 3.0f * margin) / 5.0f;
-    box_title.pos_x  = margin;
-    box_title.pos_y  = (GLfloat) WINDOW_HEIGHT - box_title.size_h - margin;
-    box_title.shadow_length = 0.0f;
-
-    box_field.size_w = ((GLfloat) (WINDOW_WIDHT - 3 * (GLint) margin)) * 2.0f / 3.0f;;
-    box_field.size_h = (GLfloat) (WINDOW_HEIGHT - 3.0f * margin) * 4.0f / 5.0f;
-    box_field.pos_x  = margin;
-    box_field.pos_y  = margin;
-    box_field.shadow_length = 0.0f;
-
-    /* TODO: reduce to just one box and add offset in drawing call */
-    for (index = 0; index < 3; index++) {
-        box_label[index].size_w = box_field.size_h / 2.0f;
-        //box_label[index].size_h = (box_field.size_h - 2.0f * margin) / 3.0f;
-        box_label[index].size_h = (box_field.size_h - 2.0f * margin) / 3.0f;
-        box_label[index].pos_x  = box_field.pos_x + box_field.size_w + margin;
-        box_label[index].pos_y  = margin + index * (box_label[index].size_h + margin);
-        box_label[index].shadow_length = 0.0f;
-    }
-
-    box_field.size_w = ((GLfloat) (WINDOW_WIDHT - 3 * (GLint) margin)) * 2.0f / 3.0f;
-    box_field.size_h = box_title.size_h * 4.0f;
-    box_field.pos_x  = margin;
-    box_field.pos_y  = margin;
-    box_field.shadow_length = 0.0f;
-
-    cell.size_w = (box_field.size_w - 2.0f * (margin + (GLfloat) BOX_RADIUS) - (GLfloat)(N_CELLS_X - 1) * CELL_PADDING) / N_CELLS_X;
-    cell.size_h = (box_field.size_h - 2.0f * (margin + (GLfloat) BOX_RADIUS) - (GLfloat)(N_CELLS_Y - 1) * CELL_PADDING) / N_CELLS_Y;
-    cell.pos_x  = box_field.pos_x + margin + (GLfloat) BOX_RADIUS;
-    cell.pos_y  = box_field.pos_y + margin + (GLfloat) BOX_RADIUS;
-    cell.shadow_length = 0.0f;
-
-
-    for (index = 0; index < N_CELLS_X * N_CELLS_Y; index++) {
-        field[index] = -1;
-
-        /* TODO: calc circle field */
-        /* CENTER: N_CELLS_X / 2, N_CELLS_Y / 2 * N_CELLS */
-    }
-
-    /* TODO: add random function to get random position for snake and food */
-    snake.head = 0;
-    snake.tail_length = 0;
-
-    food = 0;
 
     while (!glfwWindowShouldClose(window)) {
         glClearColor(COLOR_BACKGROUND[0], COLOR_BACKGROUND[1], COLOR_BACKGROUND[2], 1.0);
         glClear(GL_COLOR_BUFFER_BIT);
 
-        glfwGetFramebufferSize(window, &fb_sizew, &fb_sizeh);
-        glfwGetWindowSize(window, &w_sizew, &w_sizeh);
+        if(glfwGetKey(window, GLFW_KEY_R)) {
+            field[snake.head_posx + snake.head_posy * N_CELLS_X] = 0;
+            snake.head_posx = (size_t) rand() % N_CELLS_X;
+            snake.head_posy = (size_t) rand() % N_CELLS_Y;
+            field[snake.head_posx + snake.head_posy * N_CELLS_X] = 1;
+        }
+        else if(glfwGetKey(window, GLFW_KEY_LEFT)) {
+            field[snake.head_posx + snake.head_posy * N_CELLS_X] = 0;
+            if(snake.head_posx > 0) snake.head_posx -= 1;
+            field[snake.head_posx + snake.head_posy * N_CELLS_X] = 1;
+        }
+        else if(glfwGetKey(window, GLFW_KEY_RIGHT)) {
+            field[snake.head_posx + snake.head_posy * N_CELLS_X] = 0;
+            if(snake.head_posx < N_CELLS_X - 1) snake.head_posx += 1;
+            field[snake.head_posx + snake.head_posy * N_CELLS_X] = 1;
+        }
+        else if(glfwGetKey(window, GLFW_KEY_DOWN)) {
+            field[snake.head_posx + snake.head_posy * N_CELLS_X] = 0;
+            if(snake.head_posy > 0) snake.head_posy -= 1;
+            field[snake.head_posx + snake.head_posy * N_CELLS_X] = 1;
+        }
+        else if(glfwGetKey(window, GLFW_KEY_UP)) {
+            field[snake.head_posx + snake.head_posy * N_CELLS_X] = 0;
+            if(snake.head_posy < N_CELLS_Y - 1) snake.head_posy += 1;
+            field[snake.head_posx + snake.head_posy * N_CELLS_X] = 1;
+        }
 
-        /* rectangle shader */
+
         glUseProgram(shaderp);
-        glUniform2f(glGetUniformLocation(shaderp, "window_size"), (GLfloat) WINDOW_WIDHT, (GLfloat) WINDOW_HEIGHT);
-        glUniform2f(glGetUniformLocation(shaderp, "frambuffer_size"), (GLfloat) fb_sizew, (GLfloat) fb_sizeh);
-        glUniform1f(glGetUniformLocation(shaderp, "radius"), BOX_RADIUS);
-        glUniform1f(glGetUniformLocation(shaderp, "shadow_length"), BOX_SHADOW_LENGTH);
-        glUniform3f(glGetUniformLocation(shaderp, "obj_color"), (GLfloat) COLOR_BOX[0], (GLfloat) COLOR_BOX[1], (GLfloat) COLOR_BOX[2]);
-        //glUniform3f(glGetUniformLocation(shaderp, "shadow_color"), (GLfloat) COLOR_SHADOW[0], (GLfloat) COLOR_SHADOW[1], (GLfloat) COLOR_SHADOW[2]);
-
-        /* title box */
-        glUniform2f(glGetUniformLocation(shaderp, "obj_pos"), box_title.pos_x, box_title.pos_y);
-        glUniform2f(glGetUniformLocation(shaderp, "obj_size"), box_title.size_w, box_title.size_h);
-        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, (const void *) 0);
-
-        /* field box */
-        glUniform2f(glGetUniformLocation(shaderp, "obj_pos"), box_field.pos_x, box_field.pos_y);
-        glUniform2f(glGetUniformLocation(shaderp, "obj_size"), box_field.size_w, box_field.size_h);
-        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, (const void *) 0);
-
-        /* label box */
-        for (index = 0; index < 3; index++) {
-            glUniform2f(glGetUniformLocation(shaderp, "obj_pos"), box_label[index].pos_x, box_label[index].pos_y);
-            glUniform2f(glGetUniformLocation(shaderp, "obj_size"), box_label[index].size_w, box_label[index].size_h);
+        glUniform2f(glGetUniformLocation(shaderp, "grid_size"), (GLfloat) N_CELLS_X, (GLfloat) N_CELLS_Y);
+        glUniform3f(glGetUniformLocation(shaderp, "color_food"), COLOR_FOOD[0], COLOR_FOOD[1], COLOR_FOOD[2]);
+        glUniform3f(glGetUniformLocation(shaderp, "color_head"), COLOR_HEAD[0], COLOR_HEAD[1], COLOR_HEAD[2]);
+        glUniform3f(glGetUniformLocation(shaderp, "color_tail"), COLOR_TAIL[0], COLOR_TAIL[1], COLOR_TAIL[2]);
+        glUniform3f(glGetUniformLocation(shaderp, "color_empty"), COLOR_BACKGROUND[0], COLOR_BACKGROUND[1], COLOR_BACKGROUND[2]);
+        for(index = 0; index < N_CELLS_X * N_CELLS_Y; index++) {
+            glUniform1f(glGetUniformLocation(shaderp, "cell_id"), (GLfloat) index);
+            glUniform1i(glGetUniformLocation(shaderp, "color_value"), field[index]);
             glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, (const void *) 0);
         }
-        /* cells */
-        glUniform3f(glGetUniformLocation(shaderp, "obj_color"), (GLfloat) COLOR_FONT1[0], (GLfloat) COLOR_FONT1[1], (GLfloat) COLOR_FONT1[2]);
-        glUniform1f(glGetUniformLocation(shaderp, "radius"), CELL_RADIUS);
-        for (index = 0; index < N_CELLS_X * N_CELLS_Y; index++) {
-            glUniform2f(glGetUniformLocation(shaderp, "obj_pos"),
-                cell.pos_x + (GLfloat) (index % N_CELLS_X) * cell.size_w + (GLfloat) (index % N_CELLS_X) * (GLfloat) CELL_PADDING,
-                cell.pos_y + (GLfloat) (index / N_CELLS_X) * cell.size_h + (GLfloat) (index / N_CELLS_X) * (GLfloat) CELL_PADDING);
-            glUniform2f(glGetUniformLocation(shaderp, "obj_size"), cell.size_w, cell.size_h);
-            glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, (const void *) 0);
-        }
-
-        /* font shader */
 
         glfwSwapBuffers(window);
         glfwPollEvents();
